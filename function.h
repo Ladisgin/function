@@ -86,7 +86,7 @@ public:
 
     template<typename F>
     function(F f) {
-        if constexpr (std::is_nothrow_move_constructible<F>::value && sizeof(model<F>) <= BUFFER_SIZE && alignof(model<F>) <= alignof(size_t)) {
+        if (std::is_nothrow_move_constructible<F>::value && sizeof(model<F>) <= BUFFER_SIZE && alignof(model<F>) <= alignof(size_t)) {
             is_small = true;
             new (&buffer) model<F>(std::move(f));
         } else {
@@ -98,6 +98,8 @@ public:
     ~function() {
         if (is_small){
             (reinterpret_cast<concept_ *>(&buffer))->~concept_();
+        } else {
+            ptr.~unique_ptr();
         }
     }
 
@@ -110,6 +112,8 @@ public:
     function& operator=(function&& other) noexcept {
         if (is_small){
             (reinterpret_cast<concept_ *>(&buffer))->~concept_();
+        } else {
+            ptr.~unique_ptr();
         }
         move_from(std::move(other));
         return *this;
