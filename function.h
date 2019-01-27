@@ -12,7 +12,7 @@ struct function;
 template <typename T, typename... Args>
 struct function<T(Args...)> {
 private:
-    static const size_t BUFFER_SIZE = 64;
+    constexpr static const size_t BUFFER_SIZE = 2 * sizeof(size_t);
 
     struct concept_ {
         virtual T call(Args &&... args) const = 0;
@@ -72,21 +72,28 @@ public:
     function(std::nullptr_t) noexcept : is_small(false), ptr(nullptr) {}
 
     function(const function& other) noexcept {
+        if(&other == this){
+            return;
+        }
         is_small = other.is_small;
         if(is_small) {
             reinterpret_cast<const concept_*>(&other.buffer)->copy_to_buffer(&buffer);
         } else {
-            ptr = other.ptr->copy();
+            ptr = std::move(other.ptr->copy());
         }
     }
 
     function(function&& other) noexcept {
+        if(&other == this){
+            return;
+        }
         move_from(std::move(other));
     }
 
     template<typename F>
     function(F f) {
-        if (std::is_nothrow_move_constructible<F>::value && sizeof(model<F>) <= BUFFER_SIZE && alignof(model<F>) <= alignof(size_t)) {
+        if constexpr (std::is_nothrow_move_constructible<F>::value && sizeof(model<F>) <= BUFFER_SIZE && alignof(model<F>) <=
+                                                                                                       alignof(size_t)) {
             is_small = true;
             new (&buffer) model<F>(std::move(f));
         } else {
@@ -104,12 +111,18 @@ public:
     }
 
     function& operator=(const function& other) {
+        if(&other == this){
+            return *this;
+        }
         function t(other);
         swap(t);
         return *this;
     }
 
     function& operator=(function&& other) noexcept {
+        if(&other == this){
+            return *this;
+        }
         if (is_small){
             (reinterpret_cast<concept_ *>(&buffer))->~concept_();
         } else {
@@ -130,7 +143,7 @@ public:
     }
 
     T operator()(Args... args) const {
-        if(is_small){
+        if (is_small) {
             return reinterpret_cast<concept_ const *>(&buffer)->call(std::forward<Args>(args)...);
         } else {
             return ptr->call(std::forward<Args>(args)...);
